@@ -14,10 +14,10 @@ const MOCK_RESULT = {
     riskLevel: 'Low',
     confidence: 72,
     landslideAreaPercent: 3.1,
-    model: 'Tiny Attention U-Net (offline mock)',
+    model: 'LRASPP Model (offline mock)',
     featuresDetected: [
         'Landslide area: 3.1% of image (mock)',
-        'Tiny Attention U-Net segmentation (offline)',
+        'LRASPP segmentation (offline)',
         'Slope instability not detected',
     ],
     recommendation: 'Backend offline — connect the FastAPI server to get real predictions.',

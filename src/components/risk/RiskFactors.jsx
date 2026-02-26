@@ -31,6 +31,7 @@ const RiskFactors = ({ factors }) => {
             <FactorBar label="Slope Instability" value={factors.slopeAngle} color="bg-amber-500" />
             <FactorBar label="Vegetation Index (NDVI)" value={factors.vegetation} color="bg-green-500" />
             <FactorBar label="Soil Moisture" value={factors.soilMoisture} color="bg-cyan-500" />
+            <FactorBar label="Historical Precedent" value={factors.historicalPrecedent || 0} color="bg-purple-500" />
         </div>
     );
 };

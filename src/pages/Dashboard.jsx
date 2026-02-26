@@ -13,15 +13,15 @@ import SatelliteUpload from '../components/image/SatelliteUpload';
 import ImageResult from '../components/image/ImageResult';
 
 import { getRiskAnalysis } from '../services/mockRiskService';
-import { getWeatherData, getWeatherAlerts } from '../services/mockWeatherService';
+import { getWeatherData } from '../services/mockWeatherService';
 import { checkHistoricalProximity } from '../services/mockHistoricalService';
 import { analyzeSatelliteImage } from '../services/mockImageAnalysisService';
 
 // Real services
 import { getCurrentPosition, watchPosition, clearWatch, searchPlace } from '../services/locationService';
-import { fetchPrediction } from '../services/predictionService';
+import { fetchPrediction, saveAssessment } from '../services/predictionService';
 import { getElevation, getSoilMoisture, getSlopeSteepness } from '../services/geologyService';
-import { get7DayCumulativeRainfall, getCurrentWeather } from '../services/weatherService';
+import { get7DayCumulativeRainfall, getCurrentWeather, getWeatherAlerts } from '../services/weatherService';
 import { getNasaHistoricalLandslides } from '../services/nasaService';
 import { setHistoricalEvents } from '../services/mockHistoricalService';
 
@@ -38,6 +38,7 @@ const Dashboard = () => {
     const [historicalProximity, setHistoricalProximity] = useState(null);
     const [satelliteResult, setSatelliteResult] = useState(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [pendingAssessment, setPendingAssessment] = useState(false);
 
     // Continuous monitoring state
     const [monitoringActive, setMonitoringActive] = useState(false);
@@ -49,8 +50,9 @@ const Dashboard = () => {
     locationRef.current = location;
 
     // ── Fetch dashboard data ──────────────────────────────────────────────────
-    const fetchDashboardData = useCallback(async (lat, lng) => {
+    const fetchDashboardData = useCallback(async (lat, lng, manualSave = false) => {
         setLoading(true);
+        setPendingAssessment(false);
         try {
             // 1. Fetch real environmental data from multiple sources
             const [
@@ -78,17 +80,38 @@ const Dashboard = () => {
                 });
             }
 
-            // 3. Final parallel fetch for risk and updates
-            const [risk, alertData, historyData] = await Promise.all([
-                getRiskAnalysis(lat, lng, rain7Day, elevation, soilMoisture, slope),
+            // 3. SECUENTIAL FETCH: Check historical proximity first to influence risk calculation
+            const proximity = await checkHistoricalProximity(lat, lng);
+            setHistoricalProximity(proximity);
+
+            // 4. Parallel fetch for remaining data using historical influence
+            const [risk, alertData] = await Promise.all([
+                getRiskAnalysis(lat, lng, rain7Day, elevation, soilMoisture, slope, proximity.impactFactor),
                 getWeatherAlerts(lat, lng),
-                checkHistoricalProximity(lat, lng),
             ]);
 
             setRiskData(risk);
             setWeather(weatherData);
             setWeatherAlert(alertData);
-            setHistoricalProximity(historyData);
+
+            // 4. PERSISTENCE: Save this specific assessment to the backend
+            // Only triggered via manual "Assess Risk"
+            if (manualSave) {
+                await saveAssessment({
+                    id: `asmt-${Date.now()}`,
+                    location_name: `Location Analysis (${lat.toFixed(2)}, ${lng.toFixed(2)})`,
+                    lat,
+                    lng,
+                    risk_level: risk.riskLevel,
+                    confidence: risk.confidence || 0,
+                    details: {
+                        environmentalScore: risk.environmentalScore,
+                        weatherScore: risk.weatherScore,
+                        factors: risk.factors
+                    }
+                });
+            }
+
         } catch (error) {
             console.error('Failed to fetch dashboard data', error);
         } finally {
@@ -96,11 +119,16 @@ const Dashboard = () => {
         }
     }, []);
 
+    const handleAssessRisk = () => {
+        fetchDashboardData(location.lat, location.lng, true);
+    };
+
     // ── Start 60-second prediction polling ───────────────────────────────────
     const startMonitoring = useCallback(() => {
         if (pollTimerRef.current) clearInterval(pollTimerRef.current);
 
         const doPoll = async () => {
+            if (pendingAssessment) return; // Don't poll while waiting for initial assessment
             const { lat, lng } = locationRef.current;
             console.log(`[Monitor] Polling /predict at lat=${lat}, lng=${lng}`);
             const result = await fetchPrediction(lat, lng);
@@ -113,7 +141,7 @@ const Dashboard = () => {
         doPoll();
         pollTimerRef.current = setInterval(doPoll, POLL_INTERVAL_MS);
         setMonitoringActive(true);
-    }, []);
+    }, [pendingAssessment]);
 
     // ── Auto-request geolocation on mount ────────────────────────────────────
     useEffect(() => {
@@ -152,38 +180,36 @@ const Dashboard = () => {
             // Reset the interval so the next tick fires in 60s from the new location
             clearInterval(pollTimerRef.current);
             pollTimerRef.current = setInterval(async () => {
+                if (pendingAssessment) return;
                 const { lat, lng } = locationRef.current;
                 const result = await fetchPrediction(lat, lng);
                 setLastPredictionTime(result.timestamp);
                 setMonitoringActive(result.source === 'api');
             }, POLL_INTERVAL_MS);
         }
-    }, [location]);
+    }, [location, pendingAssessment]);
 
     // ── Map click ─────────────────────────────────────────────────────────────
     const handleLocationSelect = (latlng) => {
         const newLoc = { lat: latlng.lat, lng: latlng.lng };
         setLocation(newLoc);
-        fetchDashboardData(newLoc.lat, newLoc.lng);
+        setPendingAssessment(true);
     };
 
     // ── Go to custom coordinates ─────────────────────────────────────────────
     const handleGoToCoords = ({ lat: newLat, lng: newLng }) => {
         const newLoc = { lat: newLat, lng: newLng };
         setLocation(newLoc);
-        fetchDashboardData(newLat, newLng);
+        setPendingAssessment(true);
     };
 
     // ── Search (Nominatim) ────────────────────────────────────────────────────
-    // Called by LocationSelector:
-    //   onSearch(query, resultCallback)  → triggers search, feeds results to dropdown
-    //   onSearch(null, null, selectedResult) → user clicked a result
     const handleSearch = async (query, resultCallback, selectedResult) => {
         if (selectedResult) {
             // User picked a result from dropdown
             const newLoc = { lat: selectedResult.lat, lng: selectedResult.lng };
             setLocation(newLoc);
-            fetchDashboardData(newLoc.lat, newLoc.lng);
+            setPendingAssessment(true);
             return;
         }
         if (query && resultCallback) {
@@ -194,7 +220,7 @@ const Dashboard = () => {
                 if (places.length === 1) {
                     const newLoc = { lat: places[0].lat, lng: places[0].lng };
                     setLocation(newLoc);
-                    fetchDashboardData(newLoc.lat, newLoc.lng);
+                    setPendingAssessment(true);
                 }
             } catch (err) {
                 console.error('Nominatim search failed:', err);
@@ -210,7 +236,7 @@ const Dashboard = () => {
             const pos = await getCurrentPosition();
             setUserPosition(pos);
             setLocation(pos);
-            fetchDashboardData(pos.lat, pos.lng);
+            setPendingAssessment(true);
         } catch (err) {
             console.warn('Could not get location:', err.message);
             alert('Location access denied. Please allow location in your browser settings.');
@@ -255,6 +281,7 @@ const Dashboard = () => {
                             lng={location.lng}
                             onMapClick={handleLocationSelect}
                             userPosition={userPosition}
+                            historicalProximity={historicalProximity}
                         />
                     </div>
 
@@ -314,6 +341,8 @@ const Dashboard = () => {
                             isLoading={locationLoading}
                             monitoringActive={monitoringActive}
                             lastPredictionTime={lastPredictionTime}
+                            pendingAssessment={pendingAssessment}
+                            onAssessRisk={handleAssessRisk}
                         />
                         <WeatherPanel weather={weather} />
                         {weatherAlert && <WeatherAlert alert={weatherAlert} />}

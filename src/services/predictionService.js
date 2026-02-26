@@ -42,3 +42,51 @@ export const fetchPrediction = async (lat, lng) => {
         };
     }
 };
+/**
+ * Save a risk assessment result to the backend history.
+ */
+export const saveAssessment = async (assessmentData) => {
+    try {
+        const response = await fetch(`${BASE_URL}/assessments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(assessmentData),
+        });
+        if (!response.ok) throw new Error('Failed to save assessment');
+        return await response.json();
+    } catch (err) {
+        console.error('[PredictionService] Failed to save assessment:', err.message);
+        // Silent fail for persistence
+        return { status: 'error', message: err.message };
+    }
+};
+
+/**
+ * Fetch the history of all landslide risk assessments.
+ */
+export const fetchAssessmentHistory = async () => {
+    try {
+        const response = await fetch(`${BASE_URL}/assessments`);
+        if (!response.ok) throw new Error('Failed to fetch history');
+        return await response.json();
+    } catch (err) {
+        console.warn('[PredictionService] Could not fetch history, using empty list:', err.message);
+        return [];
+    }
+};
+
+/**
+ * Delete a specific assessment from the history.
+ */
+export const deleteAssessment = async (assessmentId) => {
+    try {
+        const response = await fetch(`${BASE_URL}/assessments/${assessmentId}`, {
+            method: 'DELETE',
+        });
+        if (!response.ok) throw new Error('Failed to delete assessment');
+        return await response.json();
+    } catch (err) {
+        console.error('[PredictionService] Failed to delete assessment:', err.message);
+        return { status: 'error', message: err.message };
+    }
+};

@@ -25,13 +25,10 @@ const ImageResult = ({ result }) => {
                     </div>
                     <div>
                         <h3 className="font-bold text-slate-900 text-sm">
-                            Tiny Attention U-Net Analysis
+                            Visual Pixel-Only Analysis
                         </h3>
                         <p className="text-xs text-slate-500">
-                            Confidence: <span className="font-semibold">{result.confidence}%</span>
-                            {result.landslideAreaPercent != null && (
-                                <> · Landslide area: <span className="font-semibold">{result.landslideAreaPercent}%</span></>
-                            )}
+                            (Coordinates & environmental data ignored)
                         </p>
                     </div>
                 </div>
@@ -61,7 +58,7 @@ const ImageResult = ({ result }) => {
             {isOffline && (
                 <div className="mt-3 flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                     <WifiOff className="w-3.5 h-3.5 flex-shrink-0" />
-                    Backend offline — start the FastAPI server to run real Tiny Attention U-Net inference.
+                    Backend offline — start the FastAPI server to run real LRASPP model inference.
                 </div>
             )}
         </div>

@@ -1,22 +1,46 @@
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-// In-memory data store for uploaded historical points
-let historicalDatabase = [
-    { id: 'hist-1', year: 2005, name: 'La Conchita Landslide', lat: 34.36, lng: -119.45, severity: 'Catastrophic', description: 'Major landslide triggered by heavy rainfall.' },
-    { id: 'hist-2', year: 2018, name: 'Montecito Mudslides', lat: 34.42, lng: -119.63, severity: 'High', description: 'Debris flows following the Thomas Fire.' },
-    { id: 'hist-3', year: 1995, name: 'Pacific Palisades Slide', lat: 34.04, lng: -118.54, severity: 'Moderate', description: 'Coastal bluff failure.' },
-];
+// Note: we still keep a bit of fallback logic if needed, 
+// but primarily we use the database.
+let cachedHistoricalEvents = [];
 
 export const getHistoricalEvents = async () => {
-    await delay(300);
-    return historicalDatabase;
+    try {
+        const response = await fetch(`${BASE_URL}/historical-events`);
+        if (!response.ok) throw new Error('API Error');
+        const data = await response.json();
+        cachedHistoricalEvents = data;
+        return data;
+    } catch (err) {
+        console.warn('[HistoricalService] Backend offline, using cache:', err.message);
+        return cachedHistoricalEvents;
+    }
 };
 
-export const setHistoricalEvents = (newEvents) => {
+export const setHistoricalEvents = async (newEvents) => {
+    // If it's a functional update (like in Events.jsx), we might need to handle it differently
+    // but for CSV uploads, we get an array.
+    let eventsToSave = [];
     if (typeof newEvents === 'function') {
-        historicalDatabase = newEvents(historicalDatabase);
+        eventsToSave = newEvents(cachedHistoricalEvents);
     } else {
-        historicalDatabase = newEvents;
+        eventsToSave = newEvents;
+    }
+
+    try {
+        const response = await fetch(`${BASE_URL}/historical-events`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(eventsToSave),
+        });
+        if (!response.ok) throw new Error('Failed to save to database');
+        const result = await response.json();
+        cachedHistoricalEvents = eventsToSave;
+        return result;
+    } catch (err) {
+        console.error('[HistoricalService] Could not save to backend:', err.message);
+        cachedHistoricalEvents = eventsToSave; // Update local cache anyway
+        return { status: 'offline', count: eventsToSave.length };
     }
 };
 
@@ -34,13 +58,14 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
 };
 
 export const checkHistoricalProximity = async (lat, lng) => {
-    await delay(200);
+    // Ensure we have data
+    const events = cachedHistoricalEvents.length > 0 ? cachedHistoricalEvents : await getHistoricalEvents();
 
     // Find the closest event in our database
     let closestEvent = null;
     let minDistance = Infinity;
 
-    historicalDatabase.forEach(event => {
+    events.forEach(event => {
         const dist = getDistance(lat, lng, event.lat, event.lng);
         if (dist < minDistance) {
             minDistance = dist;
@@ -48,20 +73,31 @@ export const checkHistoricalProximity = async (lat, lng) => {
         }
     });
 
-    const threshold = 5; // 5km alert radius
+    const threshold = 100; // Expanded to 100km for risk influence
+    const alertThreshold = 5; // 5km for severe warning
 
     if (closestEvent && minDistance <= threshold) {
+        // Calculate influence factor (0.0 to 1.0)
+        // 1.0 at < 5km, scales down to 0 at 100km
+        const impactFactor = Math.max(0, 1 - (minDistance / threshold));
+
         return {
             isClose: true,
             distance: minDistance.toFixed(2),
             event: `${closestEvent.name} (${closestEvent.year})`,
-            source: closestEvent.source || 'Local Database',
-            message: `Warning: Location is within ${minDistance.toFixed(2)}km of a known historical landslide site.`
+            source: closestEvent.source || 'Database',
+            impactFactor: parseFloat(impactFactor.toFixed(2)),
+            closestLat: closestEvent.lat,
+            closestLng: closestEvent.lng,
+            message: minDistance <= alertThreshold
+                ? `CRITICAL: Within ${minDistance.toFixed(2)}km of a known historical site.`
+                : `Nearby History: Known landslide record within ${minDistance.toFixed(2)}km (Influencing risk assessment).`
         };
     }
 
     return {
         isClose: false,
-        message: 'No historical landslides recorded within alert radius.'
+        impactFactor: 0,
+        message: 'No significant historical landslides within 100km.'
     };
 };

@@ -26,7 +26,7 @@ const Events = () => {
 
                 const combined = [...localData, ...nasaData];
                 setEvents(combined);
-                setHistoricalEvents(combined);
+                // We don't save back here to avoid duplicate API writes of NASA data
             } catch (error) {
                 console.error("Failed to load events", error);
             } finally {

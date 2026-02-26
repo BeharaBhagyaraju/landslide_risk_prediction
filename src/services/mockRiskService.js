@@ -1,7 +1,7 @@
 // Simulating API delay
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export const getRiskAnalysis = async (lat, lng, rainfall, elevation, soilMoisture, slope) => {
+export const getRiskAnalysis = async (lat, lng, rainfall, elevation, soilMoisture, slope, historicalImpact = 0) => {
     await delay(300); // Simulate processing
 
     // Heuristic Calculation (Weights: Rainfall 40%, Soil Moisture 30%, Slope 30%)
@@ -10,18 +10,24 @@ export const getRiskAnalysis = async (lat, lng, rainfall, elevation, soilMoistur
     const moistureFactor = soilMoisture * 100; // Assuming 0-1 scale
     const slopeFactor = Math.min(slope / 45, 1) * 100; // 45 degrees is very steep
 
-    const overallRisk = Math.round((rainFactor * 0.4) + (moistureFactor * 0.3) + (slopeFactor * 0.3));
+    // NEW: Historical Factor (Impacts up to 25% of the total risk score)
+    // historicalImpact is 0.0 to 1.0 (based on proximity within 100km)
+    const historicalScore = historicalImpact * 25;
+
+    const baseRisk = (rainFactor * 0.4) + (moistureFactor * 0.3) + (slopeFactor * 0.3);
+    const overallRisk = Math.min(100, Math.round(baseRisk + historicalScore));
 
     let riskLevel = 'Safe';
-    if (overallRisk > 75) riskLevel = 'High Alert';
-    else if (overallRisk > 50) riskLevel = 'Warning';
-    else if (overallRisk > 25) riskLevel = 'Watch';
+    if (overallRisk > 75) riskLevel = 'High';
+    else if (overallRisk > 50) riskLevel = 'Medium';
+    else if (overallRisk > 25) riskLevel = 'Low';
+    else riskLevel = 'Stable';
 
     return {
         overallRisk,
         riskLevel,
         environmentalScore: Math.round(100 - (slopeFactor * 0.5 + moistureFactor * 0.5)),
-        proximityScore: Math.round(rainFactor * 0.8), // Rainfall as a proxy for immediate danger
+        proximityScore: Math.round(rainFactor * 0.8),
         weatherScore: Math.round(rainFactor),
         trend: Array.from({ length: 7 }, (_, i) => ({
             day: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i],
@@ -30,8 +36,9 @@ export const getRiskAnalysis = async (lat, lng, rainfall, elevation, soilMoistur
         factors: {
             rainfallIntensity: Math.round(rainFactor),
             slopeAngle: Math.round(slopeFactor),
-            vegetation: 65, // Static for now
+            vegetation: 65,
             soilMoisture: Math.round(moistureFactor),
+            historicalPrecedent: Math.round(historicalScore * 4), // Normalize to 0-100 for display
             temperature: 20,
             windSpeed: 15
         }

@@ -51,11 +51,15 @@ export const getCurrentWeather = async (lat, lng) => {
         const history = await getRainfallHistory(lat, lng);
         const totalRain = history.reduce((sum, day) => sum + day.precip, 0);
 
+        // Derive somewhat consistent but dynamic values from lat/lng
+        const baseTemp = 20 + (Math.abs(lat) % 15);
+        const seed = Math.abs(lat * lng);
+
         return {
-            temp: 22,
-            condition: 'Partly Cloudy',
-            humidity: 65,
-            windSpeed: 12,
+            temp: Math.round(baseTemp + (seed % 5)),
+            condition: totalRain > 20 ? 'Rainy' : (totalRain > 5 ? 'Overcast' : 'Clear'),
+            humidity: Math.round(60 + (seed % 20)),
+            windSpeed: Math.round(5 + (seed % 15)),
             total7DayRain: Number(totalRain.toFixed(1)),
             rainfallHistory: history
         };
@@ -69,6 +73,32 @@ export const getCurrentWeather = async (lat, lng) => {
             rainfallHistory: generateMockRainfall()
         };
     }
+};
+
+/**
+ * Generates automated weather alerts based on environmental data
+ */
+export const getWeatherAlerts = async (lat, lng) => {
+    const rain7Day = await get7DayCumulativeRainfall(lat, lng);
+
+    if (rain7Day > 30) {
+        return {
+            severity: 'red',
+            message: `CRITICAL: ${rain7Day}mm of rain in 7 days detected. Extremely high risk of slope failure and flash floods.`
+        };
+    } else if (rain7Day > 15) {
+        return {
+            severity: 'orange',
+            message: `WARNING: High cumulative rainfall (${rain7Day}mm). Soil saturation levels are approaching critical thresholds.`
+        };
+    } else if (rain7Day > 5) {
+        return {
+            severity: 'yellow',
+            message: `ADVISORY: Moderate rainfall detected. Terrain stability may be reduced in high-slope areas.`
+        };
+    }
+
+    return null; // No alert
 };
 
 const generateMockRainfall = () => {

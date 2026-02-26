@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
+import { LocateFixed } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import 'react-leaflet-cluster/dist/assets/MarkerCluster.css';
 import 'react-leaflet-cluster/dist/assets/MarkerCluster.Default.css';
@@ -65,8 +66,17 @@ UserLocationMarker.propTypes = {
 // Helper to fly map to a new centre when props change
 const ChangeView = ({ center, zoom }) => {
     const map = useMap();
+    const lastPos = React.useRef(null);
+
     useEffect(() => {
-        map.flyTo(center, zoom, { duration: 1.2 });
+        const isSame = lastPos.current &&
+            lastPos.current[0] === center[0] &&
+            lastPos.current[1] === center[1];
+
+        if (!isSame) {
+            map.flyTo(center, zoom, { duration: 1.2 });
+            lastPos.current = center;
+        }
     }, [center, zoom, map]);
     return null;
 };
@@ -76,7 +86,32 @@ ChangeView.propTypes = {
     zoom: PropTypes.number.isRequired,
 };
 
-const MapView = ({ lat, lng, onMapClick, markers = [], userPosition = null }) => {
+// Floating Re-center Button Component
+const RecenterButton = ({ position }) => {
+    const map = useMap();
+    if (!position) return null;
+
+    return (
+        <div className="leaflet-top leaflet-right mt-12 mr-3 pointer-events-auto" style={{ zIndex: 1000 }}>
+            <button
+                onClick={(e) => {
+                    e.stopPropagation();
+                    map.flyTo(position, 15, { duration: 1.5 });
+                }}
+                className="bg-white p-2.5 rounded-xl shadow-lg border border-slate-200 text-blue-600 hover:bg-slate-50 transition-all active:scale-95 group flex items-center justify-center"
+                title="Re-center to my location"
+            >
+                <LocateFixed size={20} />
+            </button>
+        </div>
+    );
+};
+
+RecenterButton.propTypes = {
+    position: PropTypes.array,
+};
+
+const MapView = ({ lat, lng, onMapClick, markers = [], userPosition = null, historicalProximity = null }) => {
     const position = [lat, lng];
     const userPos = userPosition ? [userPosition.lat, userPosition.lng] : null;
 
@@ -106,8 +141,44 @@ const MapView = ({ lat, lng, onMapClick, markers = [], userPosition = null }) =>
                     </Popup>
                 </Marker>
 
+                {/* Historical Proximity Alert (Red Zone) */}
+                {historicalProximity?.isClose && (
+                    <>
+                        <Circle
+                            center={[historicalProximity.closestLat, historicalProximity.closestLng]}
+                            radius={100000} // 100km in meters
+                            pathOptions={{
+                                color: '#ef4444',
+                                fillColor: '#ef4444',
+                                fillOpacity: 0.1,
+                                weight: 2,
+                                dashArray: '5, 10'
+                            }}
+                        />
+                        <Circle
+                            center={[historicalProximity.closestLat, historicalProximity.closestLng]}
+                            radius={800}
+                            pathOptions={{
+                                color: '#b91c1c',
+                                fillColor: '#ef4444',
+                                fillOpacity: 0.9,
+                                weight: 3
+                            }}
+                        >
+                            <Popup>
+                                <div className="text-red-700 font-bold">⚠️ Historical Landslide Event</div>
+                                <div>{historicalProximity.event}</div>
+                                <div className="text-xs text-slate-500">Source: {historicalProximity.source}</div>
+                            </Popup>
+                        </Circle>
+                    </>
+                )}
+
                 {/* User's real GPS position */}
                 <UserLocationMarker position={userPos} />
+
+                {/* Floating Re-center Button */}
+                <RecenterButton position={userPos} />
 
                 {/* Historical / extra markers with clustering */}
                 <MarkerClusterGroup

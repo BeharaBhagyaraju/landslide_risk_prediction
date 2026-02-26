@@ -1,7 +1,8 @@
 import React from 'react';
 import PropTypes from 'prop-types';
+import { Trash2 } from 'lucide-react';
 
-const HistoryTable = ({ history }) => {
+const HistoryTable = ({ history, onDelete }) => {
     if (!history || history.length === 0) {
         return <div className="p-8 text-center text-slate-500">No assessment history found.</div>;
     }
@@ -26,15 +27,24 @@ const HistoryTable = ({ history }) => {
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-mono">{record.coordinates}</td>
                             <td className="px-6 py-4 whitespace-nowrap">
                                 <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                    ${record.riskLevel === 'High Alert' ? 'bg-red-100 text-red-800' :
-                                        record.riskLevel === 'Warning' ? 'bg-orange-100 text-orange-800' :
-                                            record.riskLevel === 'Watch' ? 'bg-yellow-100 text-yellow-800' :
-                                                'bg-green-100 text-green-800'}`}>
+                    ${record.riskLevel === 'High' || record.riskLevel === 'High Alert' ? 'bg-red-100 text-red-800' :
+                                        record.riskLevel === 'Medium' || record.riskLevel === 'Warning' ? 'bg-amber-100 text-amber-800' :
+                                            record.riskLevel === 'Low' || record.riskLevel === 'Watch' || record.riskLevel === 'Stable' ? 'bg-emerald-100 text-emerald-800' :
+                                                'bg-blue-100 text-blue-800'}`}>
                                     {record.riskLevel}
                                 </span>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 hover:text-blue-900 cursor-pointer font-medium">
-                                View Report
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium flex gap-3">
+                                <button className="text-blue-600 hover:text-blue-900 cursor-pointer">
+                                    View Report
+                                </button>
+                                <button
+                                    onClick={() => onDelete(record.id)}
+                                    className="text-red-500 hover:text-red-700 cursor-pointer p-1 rounded hover:bg-red-50 transition-colors"
+                                    title="Delete Record"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
                             </td>
                         </tr>
                     ))}

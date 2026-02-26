@@ -11,6 +11,8 @@ const LocationSelector = ({
     monitoringActive,
     lastPredictionTime,
     onGoToCoords,
+    pendingAssessment,
+    onAssessRisk,
 }) => {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState([]);
@@ -163,6 +165,22 @@ const LocationSelector = ({
                 )}
             </div>
 
+            {/* Assess Risk Button (Appears when location changes) */}
+            {pendingAssessment && (
+                <div className="mb-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <button
+                        onClick={onAssessRisk}
+                        className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-lg shadow-lg shadow-red-100 flex items-center justify-center gap-2 text-sm font-bold uppercase tracking-wider transition-all transform hover:scale-[1.02] active:scale-95 border-b-4 border-red-800"
+                    >
+                        <Search className="w-4 h-4" />
+                        Assess Risk
+                    </button>
+                    <p className="text-[10px] text-center text-red-500 font-bold mt-1.5 animate-pulse uppercase tracking-tight">
+                        New location selected. Click to analyze risk.
+                    </p>
+                </div>
+            )}
+
             {/* Use My Location */}
             <button
                 onClick={onUseCurrentLocation}
@@ -211,6 +229,8 @@ LocationSelector.propTypes = {
     isLoading: PropTypes.bool,
     monitoringActive: PropTypes.bool,
     lastPredictionTime: PropTypes.string,
+    pendingAssessment: PropTypes.bool,
+    onAssessRisk: PropTypes.func,
 };
 
 export default LocationSelector;
