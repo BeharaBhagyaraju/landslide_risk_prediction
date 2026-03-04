@@ -149,8 +149,8 @@ const Events = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="overflow-x-auto">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
+                <div className="min-w-full">
                     <table className="w-full text-left">
                         <thead>
                             <tr className="bg-slate-50 border-b border-slate-200">
@@ -161,8 +161,8 @@ const Events = () => {
                                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer hover:text-indigo-600" onClick={() => toggleSort('severity')}>
                                     Severity <ArrowUpDown className="inline w-3 h-3 ml-1" />
                                 </th>
-                                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Coordinates</th>
-                                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Description</th>
+                                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider hidden md:table-cell">Coordinates</th>
+                                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider hidden lg:table-cell">Description</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -178,10 +178,10 @@ const Events = () => {
                                             {event.severity}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 text-xs font-mono text-slate-500">
+                                    <td className="px-6 py-4 text-xs font-mono text-slate-500 hidden md:table-cell">
                                         {event.lat.toFixed(4)}, {event.lng.toFixed(4)}
                                     </td>
-                                    <td className="px-6 py-4 text-sm text-slate-500 truncate max-w-xs">{event.description}</td>
+                                    <td className="px-6 py-4 text-sm text-slate-500 truncate max-w-xs hidden lg:table-cell">{event.description}</td>
                                 </tr>
                             )) : (
                                 <tr>

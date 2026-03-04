@@ -15,7 +15,7 @@ import ImageResult from '../components/image/ImageResult';
 import { getRiskAnalysis } from '../services/mockRiskService';
 import { getWeatherData } from '../services/mockWeatherService';
 import { checkHistoricalProximity } from '../services/mockHistoricalService';
-import { analyzeSatelliteImage } from '../services/mockImageAnalysisService';
+import { analyzeSatelliteImage, uploadModel } from '../services/mockImageAnalysisService';
 
 // Real services
 import { getCurrentPosition, watchPosition, clearWatch, searchPlace } from '../services/locationService';
@@ -37,6 +37,7 @@ const Dashboard = () => {
     const [weatherAlert, setWeatherAlert] = useState(null);
     const [historicalProximity, setHistoricalProximity] = useState(null);
     const [satelliteResult, setSatelliteResult] = useState(null);
+    const [satelliteImagePreview, setSatelliteImagePreview] = useState(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [pendingAssessment, setPendingAssessment] = useState(false);
 
@@ -246,15 +247,49 @@ const Dashboard = () => {
     };
 
     // ── Satellite ────────────────────────────────────────────────────────────
-    const handleImageUpload = async (file) => {
+    const handleImageUpload = async (imageSource) => {
         setIsAnalyzing(true);
+
+        // Handle both File objects and base64 strings
+        const previewUrl = typeof imageSource === 'string'
+            ? imageSource
+            : URL.createObjectURL(imageSource);
+
+        setSatelliteImagePreview(previewUrl);
+
         try {
-            const result = await analyzeSatelliteImage(file);
+            const result = await analyzeSatelliteImage(imageSource);
             setSatelliteResult(result);
         } catch (error) {
             console.error('Analysis failed', error);
         } finally {
             setIsAnalyzing(false);
+        }
+    };
+
+    const handleModelUpload = async (file) => {
+        try {
+            const result = await uploadModel(file);
+            console.log('Model uploaded successfully', result);
+
+            // Guard against null/empty results (e.g. backend returned 200 with no body)
+            if (!result) {
+                console.warn('Upload returned null result, skipping auto-analysis');
+                return result;
+            }
+
+            // AUTO-ANALYSIS: If a dataset was uploaded and an image was extracted, run analysis immediately
+            if (result.isDataset && result.preview) {
+                setTimeout(() => {
+                    handleImageUpload(result.preview);
+                }, 500);
+            }
+
+            return result;
+        } catch (error) {
+            console.error('Model upload failed', error);
+            alert(`Failed to upload model: ${error.message}`);
+            throw error;
         }
     };
 
@@ -273,9 +308,31 @@ const Dashboard = () => {
 
             {/* Row 2: Main Monitoring Command Center */}
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-                {/* Left: Interactive Map & Primary Analytics */}
+                {/* Mobile Priority: Controls & Risk Meter (Moves to right on desktop) */}
+                <div className="order-first lg:order-last space-y-4 flex flex-col h-full">
+                    <RiskGauge value={riskData.overallRisk} />
+                    <div className="space-y-3 flex-1">
+                        <LocationSelector
+                            lat={location.lat}
+                            lng={location.lng}
+                            onSearch={handleSearch}
+                            onUseCurrentLocation={handleUseCurrentLocation}
+                            onGoToCoords={handleGoToCoords}
+                            isLoading={locationLoading}
+                            monitoringActive={monitoringActive}
+                            lastPredictionTime={lastPredictionTime}
+                            pendingAssessment={pendingAssessment}
+                            onAssessRisk={handleAssessRisk}
+                        />
+                        <WeatherPanel weather={weather} />
+                        {weatherAlert && <WeatherAlert alert={weatherAlert} />}
+                        <HistoricalProximityCard analysis={historicalProximity} />
+                    </div>
+                </div>
+
+                {/* Left: Interactive Map & Primary Analytics (Occupies main space) */}
                 <div className="lg:col-span-3 flex flex-col space-y-4">
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden min-h-[500px] flex-1">
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden min-h-[350px] md:min-h-[500px] flex-1">
                         <MapView
                             lat={location.lat}
                             lng={location.lng}
@@ -303,7 +360,7 @@ const Dashboard = () => {
                         </div>
                     </div>
 
-                    {/* Satellite Imagery AI Analysis (Integrated into main flow) */}
+                    {/* Satellite Imagery AI Analysis */}
                     <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex-shrink-0">
                         <div className="flex items-center justify-between mb-4">
                             <div className="flex flex-col">
@@ -313,7 +370,11 @@ const Dashboard = () => {
                             <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold uppercase rounded-md tracking-wider">Early Warning System</span>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                            <SatelliteUpload onUpload={handleImageUpload} isAnalyzing={isAnalyzing} />
+                            <SatelliteUpload
+                                onUpload={handleImageUpload}
+                                onModelUpload={handleModelUpload}
+                                isAnalyzing={isAnalyzing}
+                            />
                             {isAnalyzing ? (
                                 <div className="flex items-center justify-center h-48 bg-slate-50 rounded-xl text-slate-500 animate-pulse border border-dashed border-slate-200">
                                     <div className="text-center">
@@ -322,31 +383,13 @@ const Dashboard = () => {
                                     </div>
                                 </div>
                             ) : (
-                                <ImageResult result={satelliteResult} />
+                                satelliteResult && (
+                                    <div className="lg:col-span-1">
+                                        <ImageResult result={satelliteResult} originalImage={satelliteImagePreview} />
+                                    </div>
+                                )
                             )}
                         </div>
-                    </div>
-                </div>
-
-                {/* Right: Controls & Peripheral Monitoring */}
-                <div className="space-y-4 flex flex-col h-full">
-                    <RiskGauge value={riskData.overallRisk} />
-                    <div className="space-y-3 flex-1">
-                        <LocationSelector
-                            lat={location.lat}
-                            lng={location.lng}
-                            onSearch={handleSearch}
-                            onUseCurrentLocation={handleUseCurrentLocation}
-                            onGoToCoords={handleGoToCoords}
-                            isLoading={locationLoading}
-                            monitoringActive={monitoringActive}
-                            lastPredictionTime={lastPredictionTime}
-                            pendingAssessment={pendingAssessment}
-                            onAssessRisk={handleAssessRisk}
-                        />
-                        <WeatherPanel weather={weather} />
-                        {weatherAlert && <WeatherAlert alert={weatherAlert} />}
-                        <HistoricalProximityCard analysis={historicalProximity} />
                     </div>
                 </div>
             </div>

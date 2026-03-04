@@ -1,8 +1,16 @@
 @import "tailwindcss";
 
 @layer base {
+  :root {
+    --color-navy: #0a0521;
+    --color-purple: #932093;
+    --color-pink: #e699d6;
+    --color-pale: #f5f0f5;
+  }
+
   body {
-    @apply bg-slate-50 text-slate-900;
+    background-color: var(--color-pale);
+    @apply text-slate-900;
   }
 }
 
@@ -22,4 +30,20 @@
 
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-slate-400;
+}
+
+@keyframes pulse-slow {
+
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+
+  50% {
+    opacity: 0.95;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }

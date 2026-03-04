@@ -1,32 +1,56 @@
 /**
  * Weather Service - Fetches real-world meteorological data
- * Source: VisualCrossing Weather API
+ * Source: Open-Meteo API (Free, No Key Required)
  */
 
-// Replace with your real API key
-const VISUAL_CROSSING_KEY = 'YOUR_VISUAL_CROSSING_KEY';
+const getWmoWeatherLabel = (code) => {
+    const mapping = {
+        0: 'Clear Sky',
+        1: 'Mainly Clear',
+        2: 'Partly Cloudy',
+        3: 'Overcast',
+        45: 'Fog',
+        48: 'Depositing Rime Fog',
+        51: 'Light Drizzle',
+        53: 'Moderate Drizzle',
+        55: 'Dense Drizzle',
+        61: 'Slight Rain',
+        63: 'Moderate Rain',
+        65: 'Heavy Rain',
+        71: 'Slight Snow',
+        73: 'Moderate Snow',
+        75: 'Heavy Snow',
+        80: 'Slight Rain Showers',
+        81: 'Moderate Rain Showers',
+        82: 'Violent Rain Showers',
+        95: 'Thunderstorm',
+        96: 'Thunderstorm with Hail',
+        99: 'Heavy Thunderstorm with Hail',
+    };
+    return mapping[code] || 'Unknown';
+};
+
+/**
+ * Fetches current weather and last 7 days of rainfall in one request
+ */
+const fetchOpenMeteoData = async (lat, lng) => {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=precipitation_sum&past_days=7&timezone=auto`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Open-Meteo API error: ${response.status}`);
+    return await response.json();
+};
 
 /**
  * Fetches the last 7 days of rainfall data for a location
  */
 export const getRainfallHistory = async (lat, lng) => {
     try {
-        if (VISUAL_CROSSING_KEY === 'YOUR_VISUAL_CROSSING_KEY') {
-            console.warn('VisualCrossing API key not found, using dummy data');
-            return generateMockRainfall();
-        }
+        const data = await fetchOpenMeteoData(lat, lng);
+        if (!data.daily) throw new Error('No daily data returned');
 
-        const response = await fetch(
-            `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/${lat},${lng}/last7days?unitGroup=metric&elements=datetime,precip&include=days&key=${VISUAL_CROSSING_KEY}&contentType=json`
-        );
-
-        if (!response.ok) throw new Error('Weather API failed');
-        const data = await response.json();
-
-        // Return daily precipitation values
-        return data.days.map(day => ({
-            date: day.datetime,
-            precip: day.precip || 0
+        return data.daily.time.map((time, index) => ({
+            date: time,
+            precip: data.daily.precipitation_sum[index] || 0
         }));
     } catch (error) {
         console.error('Error fetching rainfall history:', error);
@@ -38,9 +62,13 @@ export const getRainfallHistory = async (lat, lng) => {
  * Calculates cumulative rainfall over the last 7 days
  */
 export const get7DayCumulativeRainfall = async (lat, lng) => {
-    const history = await getRainfallHistory(lat, lng);
-    const total = history.reduce((sum, day) => sum + day.precip, 0);
-    return Number(total.toFixed(2));
+    try {
+        const history = await getRainfallHistory(lat, lng);
+        const total = history.reduce((sum, day) => sum + day.precip, 0);
+        return Number(total.toFixed(2));
+    } catch (error) {
+        return 0;
+    }
 };
 
 /**
@@ -48,22 +76,24 @@ export const get7DayCumulativeRainfall = async (lat, lng) => {
  */
 export const getCurrentWeather = async (lat, lng) => {
     try {
-        const history = await getRainfallHistory(lat, lng);
-        const totalRain = history.reduce((sum, day) => sum + day.precip, 0);
+        const data = await fetchOpenMeteoData(lat, lng);
+        const history = data.daily.time.map((time, index) => ({
+            date: time,
+            precip: data.daily.precipitation_sum[index] || 0
+        }));
 
-        // Derive somewhat consistent but dynamic values from lat/lng
-        const baseTemp = 20 + (Math.abs(lat) % 15);
-        const seed = Math.abs(lat * lng);
+        const total7DayRain = history.reduce((sum, day) => sum + day.precip, 0);
 
         return {
-            temp: Math.round(baseTemp + (seed % 5)),
-            condition: totalRain > 20 ? 'Rainy' : (totalRain > 5 ? 'Overcast' : 'Clear'),
-            humidity: Math.round(60 + (seed % 20)),
-            windSpeed: Math.round(5 + (seed % 15)),
-            total7DayRain: Number(totalRain.toFixed(1)),
+            temp: Math.round(data.current.temperature_2m),
+            condition: getWmoWeatherLabel(data.current.weather_code),
+            humidity: data.current.relative_humidity_2m,
+            windSpeed: Math.round(data.current.wind_speed_10m),
+            total7DayRain: Number(total7DayRain.toFixed(1)),
             rainfallHistory: history
         };
     } catch (error) {
+        console.error('Error fetching current weather:', error);
         return {
             temp: 20,
             condition: 'Clear',
@@ -79,23 +109,27 @@ export const getCurrentWeather = async (lat, lng) => {
  * Generates automated weather alerts based on environmental data
  */
 export const getWeatherAlerts = async (lat, lng) => {
-    const rain7Day = await get7DayCumulativeRainfall(lat, lng);
+    try {
+        const rain7Day = await get7DayCumulativeRainfall(lat, lng);
 
-    if (rain7Day > 30) {
-        return {
-            severity: 'red',
-            message: `CRITICAL: ${rain7Day}mm of rain in 7 days detected. Extremely high risk of slope failure and flash floods.`
-        };
-    } else if (rain7Day > 15) {
-        return {
-            severity: 'orange',
-            message: `WARNING: High cumulative rainfall (${rain7Day}mm). Soil saturation levels are approaching critical thresholds.`
-        };
-    } else if (rain7Day > 5) {
-        return {
-            severity: 'yellow',
-            message: `ADVISORY: Moderate rainfall detected. Terrain stability may be reduced in high-slope areas.`
-        };
+        if (rain7Day > 30) {
+            return {
+                severity: 'red',
+                message: `CRITICAL: ${rain7Day}mm of rain in 7 days detected. Extremely high risk of slope failure and flash floods.`
+            };
+        } else if (rain7Day > 15) {
+            return {
+                severity: 'orange',
+                message: `WARNING: High cumulative rainfall (${rain7Day}mm). Soil saturation levels are approaching critical thresholds.`
+            };
+        } else if (rain7Day > 5) {
+            return {
+                severity: 'yellow',
+                message: `ADVISORY: Moderate rainfall detected. Terrain stability may be reduced in high-slope areas.`
+            };
+        }
+    } catch (e) {
+        return null;
     }
 
     return null; // No alert

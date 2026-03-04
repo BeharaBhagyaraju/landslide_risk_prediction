@@ -90,3 +90,17 @@ export const deleteAssessment = async (assessmentId) => {
         return { status: 'error', message: err.message };
     }
 };
+
+/**
+ * Fetch a single assessment by ID.
+ */
+export const getAssessmentById = async (assessmentId) => {
+    try {
+        const response = await fetch(`${BASE_URL}/assessments/${assessmentId}`);
+        if (!response.ok) throw new Error('Assessment not found');
+        return await response.json();
+    } catch (err) {
+        console.error('[PredictionService] Failed to fetch assessment:', err.message);
+        return null;
+    }
+};

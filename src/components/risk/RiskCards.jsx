@@ -48,29 +48,29 @@ const RiskCards = ({ riskData }) => {
                 title="Overall Risk"
                 value={riskData.riskLevel}
                 icon={AlertTriangle}
-                color="bg-red-500"
+                color="bg-[#0a0521]"
                 status={riskData.riskLevel}
             />
             <Card
-                title="Environmental Score"
+                title="Ground Stability"
                 value={riskData.environmentalScore}
                 unit="/ 100"
                 icon={Mountain}
-                color="bg-emerald-500"
+                color="bg-[#932093]"
             />
             <Card
                 title="Soil Saturation"
                 value={riskData.factors.soilMoisture}
                 unit="%"
                 icon={Droplets}
-                color="bg-blue-500"
+                color="bg-[#e699d6]"
             />
             <Card
-                title="Weather Impact"
+                title="Atmospheric Impact"
                 value={riskData.weatherScore}
                 unit="/ 100"
                 icon={Wind}
-                color="bg-amber-500"
+                color="bg-slate-400"
             />
         </div>
     );

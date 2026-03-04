@@ -1,35 +1,58 @@
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import PropTypes from 'prop-types';
+import clsx from 'clsx';
 
 const RiskGauge = ({ value }) => {
     const data = [
-        { name: 'Low', value: 30, color: '#10B981' },
-        { name: 'Moderate', value: 30, color: '#FBBF24' },
-        { name: 'High', value: 25, color: '#F97316' },
-        { name: 'Extreme', value: 15, color: '#EF4444' },
+        { name: 'Stable', value: 25, color: '#f5f0f5' },
+        { name: 'Watch', value: 25, color: '#e699d6' },
+        { name: 'Warning', value: 25, color: '#932093' },
+        { name: 'Critical', value: 25, color: '#0a0521' },
     ];
 
-    // Calculate needle angle
-    // 0% value = 180 degrees (left), 100% value = 0 degrees (right)
     const angle = 180 - (value / 100) * 180;
 
-    const renderNeedle = (v, data, cx, cy, iR, oR, color) => {
-        const x80 = cx + oR * Math.cos(-Math.PI * (v / 180));
-        const y80 = cy + oR * Math.sin(-Math.PI * (v / 180));
+    const renderNeedle = (v, cx, cy, len) => {
+        const rad = Math.PI * (v / 180);
+        const x = cx + len * Math.cos(-rad);
+        const y = cy + len * Math.sin(-rad);
         return (
             <g>
-                <circle cx={cx} cy={cy} r={5} fill="#1e293b" />
-                <path d={`M${cx} ${cy} L${x80} ${y80}`} stroke="#1e293b" strokeWidth={3} strokeLinecap="round" />
+                <circle cx={cx} cy={cy} r={8} fill="#0a0521" />
+                <path
+                    d={`M${cx} ${cy} L${x} ${y}`}
+                    stroke="#0a0521"
+                    strokeWidth={5}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                />
             </g>
         );
     };
 
     return (
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 h-full flex flex-col">
-            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6">Risk Meter</h3>
-            <div className="flex-1 relative flex flex-col items-center justify-center">
-                <ResponsiveContainer width="100%" height={160}>
+        <div className="bg-white p-6 rounded-2xl shadow-xl border border-slate-100 h-full flex flex-col items-center justify-between min-h-[300px]">
+            <div className="w-full text-center space-y-1">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Stability Forecast</h3>
+                <div className="flex flex-col items-center py-2">
+                    <span className="text-6xl font-black text-slate-900 leading-none tracking-tighter tabular-nums drop-shadow-sm">
+                        {value}<span className="text-2xl ml-1 opacity-40 font-bold">%</span>
+                    </span>
+                    <div className={clsx(
+                        "mt-3 px-4 py-1.5 rounded-full border shadow-sm flex items-center gap-2",
+                        value > 60 ? "bg-red-50 border-red-100 text-red-600" :
+                            value > 30 ? "bg-amber-50 border-amber-100 text-amber-600" :
+                                "bg-emerald-50 border-emerald-100 text-emerald-600"
+                    )}>
+                        <div className={clsx("w-2 h-2 rounded-full", value > 60 && "animate-pulse", "bg-current")} />
+                        <span className="text-[10px] font-black uppercase tracking-widest leading-none">Risk Index</span>
+                    </div>
+                </div>
+            </div>
+
+            <div className="relative w-full max-w-[240px] aspect-[16/9] mt-4 flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                         <Pie
                             dataKey="value"
@@ -38,42 +61,35 @@ const RiskGauge = ({ value }) => {
                             data={data}
                             cx="50%"
                             cy="100%"
-                            innerRadius={65}
-                            outerRadius={85}
-                            stroke="none"
+                            innerRadius="75%"
+                            outerRadius="100%"
+                            stroke="#fff"
+                            strokeWidth={3}
+                            isAnimationActive={true}
                         >
                             {data.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.color} opacity={0.8} />
+                                <Cell key={`cell-${index}`} fill={entry.color} />
                             ))}
-                        </Pie>
-                        <Pie
-                            dataKey="value"
-                            startAngle={180}
-                            endAngle={0}
-                            data={[{ value: 100 }]}
-                            cx="50%"
-                            cy="100%"
-                            innerRadius={0}
-                            outerRadius={0}
-                            stroke="none"
-                        >
-                            <Cell key="needle" fill="none" />
                         </Pie>
                     </PieChart>
                 </ResponsiveContainer>
 
-                {/* Custom SVG Overlay for the needle */}
-                <svg width="100%" height="160" className="absolute top-0 left-0 overflow-visible pointer-events-none">
-                    {renderNeedle(angle, data, 107.5, 160, 65, 80, '#1e293b')}
-                </svg>
-
-                <div className="mt-2 flex flex-col items-center">
-                    <span className="text-4xl font-black text-slate-900 leading-tight">{value}%</span>
-                    <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 rounded text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
-                        <div className={`w-1.5 h-1.5 rounded-full ${value > 60 ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`} />
-                        Criticality Index
-                    </div>
+                <div className="absolute inset-0 pointer-events-none">
+                    {/* Adjusted viewBox to match 100% height relative to width */}
+                    <svg viewBox="0 0 240 135" width="100%" height="100%" className="overflow-visible">
+                        {/* Needle at Bottom Center (120, 135) pointing upwards */}
+                        {renderNeedle(angle, 120, 135, 95)}
+                    </svg>
                 </div>
+            </div>
+
+            <div className="w-full grid grid-cols-4 gap-2 mt-6 pt-4 border-t border-slate-50">
+                {data.map((d, i) => (
+                    <div key={i} className="flex flex-col items-center">
+                        <div className="w-full h-1.5 rounded-full mb-1.5" style={{ backgroundColor: d.color, opacity: 0.3 }} />
+                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">{d.name}</span>
+                    </div>
+                ))}
             </div>
         </div>
     );

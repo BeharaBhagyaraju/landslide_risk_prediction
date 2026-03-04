@@ -24,10 +24,25 @@ const MOCK_RESULT = {
     source: 'offline',
 };
 
-export const analyzeSatelliteImage = async (file) => {
+export const analyzeSatelliteImage = async (fileOrBase64) => {
     try {
+        let file = fileOrBase64;
+
+        // If it's a base64 string (from H5 extraction), convert to Blob
+        if (typeof fileOrBase64 === 'string' && fileOrBase64.startsWith('data:image')) {
+            const arr = fileOrBase64.split(',');
+            const mime = arr[0].match(/:(.*?);/)[1];
+            const bstr = atob(arr[1]);
+            let n = bstr.length;
+            const u8arr = new Uint8Array(n);
+            while (n--) {
+                u8arr[n] = bstr.charCodeAt(n);
+            }
+            file = new Blob([u8arr], { type: mime });
+        }
+
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', file, 'satellite.png');
 
         const response = await fetch(`${BASE_URL}/analyze-image`, {
             method: 'POST',
@@ -46,5 +61,30 @@ export const analyzeSatelliteImage = async (file) => {
         // Simulate a short processing delay so the UI spinner shows
         await new Promise((r) => setTimeout(r, 1200));
         return { ...MOCK_RESULT };
+    }
+};
+
+/**
+ * Uploads a custom .h5 Keras model to the backend.
+ */
+export const uploadModel = async (file) => {
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${BASE_URL}/upload-model`, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.detail || 'Failed to upload model');
+        }
+
+        return await response.json();
+    } catch (err) {
+        console.error('[ImageAnalysisService] Model upload failed:', err.message);
+        throw err;
     }
 };
