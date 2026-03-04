@@ -3,6 +3,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import PropTypes from 'prop-types';
 
 const RiskTrendChart = ({ data }) => {
+    if (!data) return null;
     return (
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 h-full">
             <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">7-Day Risk Trend</h3>

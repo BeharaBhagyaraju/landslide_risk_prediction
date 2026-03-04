@@ -11,6 +11,7 @@ import HistoricalProximityCard from '../components/history/HistoricalProximityCa
 import ReportGenerator from '../components/report/ReportGenerator';
 import SatelliteUpload from '../components/image/SatelliteUpload';
 import ImageResult from '../components/image/ImageResult';
+import DangerAlert from '../components/risk/DangerAlert';
 
 import { getRiskAnalysis } from '../services/mockRiskService';
 import { getWeatherData } from '../services/mockWeatherService';
@@ -25,12 +26,27 @@ import { get7DayCumulativeRainfall, getCurrentWeather, getWeatherAlerts } from '
 import { getNasaHistoricalLandslides } from '../services/nasaService';
 import { setHistoricalEvents } from '../services/mockHistoricalService';
 
-const POLL_INTERVAL_MS = 60_000; // 60 seconds
+const POLL_INTERVAL_MS = 60_000;         // 60 seconds — existing monitoring beacon
+const AUTO_CHECK_INTERVAL_MS = 3_600_000; // 1 hour — scheduled GPS risk check
+const LOCATION_CHANGE_KM = 1.0;           // km threshold before a location-change check fires
+
+/** Haversine distance in km between two GPS points */
+const haversineDistance = (lat1, lng1, lat2, lng2) => {
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
 
 const Dashboard = () => {
     const [location, setLocation] = useState({ lat: 34.05, lng: -118.25 });
     const [userPosition, setUserPosition] = useState(null); // live GPS "you are here"
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [locationLoading, setLocationLoading] = useState(false);
     const [riskData, setRiskData] = useState(null);
     const [weather, setWeather] = useState(null);
@@ -40,6 +56,10 @@ const Dashboard = () => {
     const [satelliteImagePreview, setSatelliteImagePreview] = useState(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [pendingAssessment, setPendingAssessment] = useState(false);
+    const [showDangerAlert, setShowDangerAlert] = useState(false);
+    const [alertSource, setAlertSource] = useState('manual'); // 'manual' | 'auto-hourly' | 'auto-location'
+    const [alertRiskData, setAlertRiskData] = useState(null); // riskData snapshot to show inside alert
+    const [alertLocation, setAlertLocation] = useState(null); // coords snapshot for the alert
 
     // Continuous monitoring state
     const [monitoringActive, setMonitoringActive] = useState(false);
@@ -47,11 +67,14 @@ const Dashboard = () => {
 
     const watchIdRef = useRef(null);
     const pollTimerRef = useRef(null);
-    const locationRef = useRef(location); // keeps latest coords available inside interval closure
+    const hourlyTimerRef = useRef(null);
+    const locationRef = useRef(location);
     locationRef.current = location;
+    const lastCheckedPosRef = useRef(null);   // last GPS pos we ran a location-change check on
+    const lastAutoAlertTimeRef = useRef(0);   // epoch ms of last auto alert — prevents spam
 
     // ── Fetch dashboard data ──────────────────────────────────────────────────
-    const fetchDashboardData = useCallback(async (lat, lng, manualSave = false) => {
+    const fetchDashboardData = useCallback(async (lat, lng, manualSave = false, autoAlert = false) => {
         setLoading(true);
         setPendingAssessment(false);
         try {
@@ -81,7 +104,7 @@ const Dashboard = () => {
                 });
             }
 
-            // 3. SECUENTIAL FETCH: Check historical proximity first to influence risk calculation
+            // 3. SEQUENTIAL FETCH: Check historical proximity first to influence risk calculation
             const proximity = await checkHistoricalProximity(lat, lng);
             setHistoricalProximity(proximity);
 
@@ -95,7 +118,7 @@ const Dashboard = () => {
             setWeather(weatherData);
             setWeatherAlert(alertData);
 
-            // 4. PERSISTENCE: Save this specific assessment to the backend
+            // 5. PERSISTENCE: Save this specific assessment to the backend
             // Only triggered via manual "Assess Risk"
             if (manualSave) {
                 await saveAssessment({
@@ -111,6 +134,23 @@ const Dashboard = () => {
                         factors: risk.factors
                     }
                 });
+
+                // 6. Show danger alert for manual Assess Risk if High risk
+                if (risk.riskLevel === 'High') {
+                    setShowDangerAlert(true);
+                }
+            }
+
+            // 7. AUTO ALERT: fire when triggered by GPS auto-check (not saved to history)
+            if (autoAlert && risk.riskLevel === 'High') {
+                const now = Date.now();
+                if (now - lastAutoAlertTimeRef.current >= 30 * 60 * 1000) {
+                    lastAutoAlertTimeRef.current = now;
+                    setAlertSource('auto-location');
+                    setAlertLocation({ lat, lng });
+                    setAlertRiskData(risk);
+                    setShowDangerAlert(true);
+                }
             }
 
         } catch (error) {
@@ -121,8 +161,42 @@ const Dashboard = () => {
     }, []);
 
     const handleAssessRisk = () => {
+        setAlertSource('manual');
         fetchDashboardData(location.lat, location.lng, true);
     };
+
+    // ── Background risk check — uses getRiskAnalysis (same source as dashboard) ──────
+    // Used for hourly timer and watchPosition location-change detection.
+    const runBackgroundRiskCheck = useCallback(async (lat, lng, source) => {
+        // Anti-spam: don't re-alert if we already alerted within the last 30 minutes
+        const now = Date.now();
+        if (now - lastAutoAlertTimeRef.current < 30 * 60 * 1000) return;
+
+        try {
+            // Use the same services as the dashboard (not fetchPrediction which hits the backend
+            // and returns 'Unknown' when offline)
+            const [elevation, rain7Day, soilMoisture, slope] = await Promise.all([
+                getElevation(lat, lng),
+                get7DayCumulativeRainfall(lat, lng),
+                getSoilMoisture(lat, lng),
+                getSlopeSteepness(lat, lng),
+            ]);
+            const proximity = await checkHistoricalProximity(lat, lng);
+            const risk = await getRiskAnalysis(lat, lng, rain7Day, elevation, soilMoisture, slope, proximity.impactFactor);
+
+            console.log(`[AutoCheck:${source}] risk=${risk.riskLevel} at (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+
+            if (risk.riskLevel === 'High') {
+                lastAutoAlertTimeRef.current = now;
+                setAlertSource(source);
+                setAlertLocation({ lat, lng });
+                setAlertRiskData(risk);
+                setShowDangerAlert(true);
+            }
+        } catch (err) {
+            console.warn(`[AutoCheck:${source}] Failed:`, err.message);
+        }
+    }, []);
 
     // ── Start 60-second prediction polling ───────────────────────────────────
     const startMonitoring = useCallback(() => {
@@ -146,22 +220,41 @@ const Dashboard = () => {
 
     // ── Auto-request geolocation on mount ────────────────────────────────────
     useEffect(() => {
-        // Initial dashboard data load
-        fetchDashboardData(location.lat, location.lng);
-
-        // Ask for location permission immediately
+        // Get real GPS first — map auto-centers and risk is predicted for actual location.
+        // Falls back to default coords only if GPS is denied.
         getCurrentPosition()
             .then((pos) => {
                 setUserPosition(pos);
                 setLocation(pos);
                 locationRef.current = pos;
-                fetchDashboardData(pos.lat, pos.lng);
-            })
-            .catch((err) => console.warn('Geolocation denied or failed:', err.message));
+                lastCheckedPosRef.current = pos;
 
-        // Start watchPosition for live tracking
+                // Load full dashboard for real GPS (no save to history, auto-alert if High)
+                fetchDashboardData(pos.lat, pos.lng, false, true);
+            })
+            .catch((err) => {
+                console.warn('Geolocation denied or failed:', err.message);
+                // GPS denied — fall back to default coordinates
+                fetchDashboardData(location.lat, location.lng, false);
+            });
+
+        // Start watchPosition for live tracking + location-change risk checks
         watchIdRef.current = watchPosition(
-            (pos) => setUserPosition(pos),
+            (pos) => {
+                setUserPosition(pos);
+
+                // Location-change check: fire if user moved ≥ LOCATION_CHANGE_KM from last checked spot
+                const prev = lastCheckedPosRef.current;
+                if (prev) {
+                    const dist = haversineDistance(prev.lat, prev.lng, pos.lat, pos.lng);
+                    if (dist >= LOCATION_CHANGE_KM) {
+                        lastCheckedPosRef.current = pos;
+                        runBackgroundRiskCheck(pos.lat, pos.lng, 'auto-location');
+                    }
+                } else {
+                    lastCheckedPosRef.current = pos;
+                }
+            },
             (err) => console.warn('watchPosition error:', err.message)
         );
 
@@ -171,9 +264,28 @@ const Dashboard = () => {
         return () => {
             clearWatch(watchIdRef.current);
             if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+            if (hourlyTimerRef.current) clearInterval(hourlyTimerRef.current);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // ── Hourly GPS risk check ───────────────────────────────────────────────────
+    useEffect(() => {
+        const doHourlyCheck = async () => {
+            try {
+                const pos = await getCurrentPosition();
+                console.log('[HourlyCheck] Scheduled risk check at', pos);
+                runBackgroundRiskCheck(pos.lat, pos.lng, 'auto-hourly');
+            } catch {
+                // GPS denied — fall back to last known location
+                const { lat, lng } = locationRef.current;
+                runBackgroundRiskCheck(lat, lng, 'auto-hourly');
+            }
+        };
+
+        hourlyTimerRef.current = setInterval(doHourlyCheck, AUTO_CHECK_INTERVAL_MS);
+        return () => clearInterval(hourlyTimerRef.current);
+    }, [runBackgroundRiskCheck]);
 
     // Restart monitoring if location state changes (so polling uses new coords)
     useEffect(() => {
@@ -303,6 +415,15 @@ const Dashboard = () => {
 
     return (
         <div className="space-y-4 pb-12">
+            {/* ── High-Risk Danger Alert Modal ── */}
+            {/* Shown after manual Assess Risk (uses full riskData) OR auto background checks */}
+            <DangerAlert
+                show={showDangerAlert}
+                riskData={alertSource === 'manual' ? riskData : alertRiskData}
+                location={alertSource === 'manual' ? location : (alertLocation ?? location)}
+                source={alertSource}
+                onClose={() => setShowDangerAlert(false)}
+            />
             {/* Row 1: Key Performance Indicators (KPIs) */}
             <RiskCards riskData={riskData} />
 
@@ -310,7 +431,7 @@ const Dashboard = () => {
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
                 {/* Mobile Priority: Controls & Risk Meter (Moves to right on desktop) */}
                 <div className="order-first lg:order-last space-y-4 flex flex-col h-full">
-                    <RiskGauge value={riskData.overallRisk} />
+                    <RiskGauge value={riskData?.overallRisk ?? 0} />
                     <div className="space-y-3 flex-1">
                         <LocationSelector
                             lat={location.lat}
@@ -345,10 +466,10 @@ const Dashboard = () => {
                     {/* Integrated Monitoring Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
                         <div className="h-full">
-                            <RiskTrendChart data={riskData.trend} />
+                            <RiskTrendChart data={riskData?.trend} />
                         </div>
                         <div className="h-full">
-                            <RiskFactors factors={riskData.factors} />
+                            <RiskFactors factors={riskData?.factors} />
                         </div>
                         <div className="h-full">
                             <ReportGenerator

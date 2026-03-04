@@ -23,6 +23,7 @@ FactorBar.propTypes = {
 }
 
 const RiskFactors = ({ factors }) => {
+    if (!factors) return null;
     return (
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 h-full">
             <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Risk Assessment Vectors</h3>
