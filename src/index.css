@@ -8,9 +8,20 @@
     --color-pale: #f5f0f5;
   }
 
+  html {
+    /* Use dynamic viewport height on mobile (avoids address-bar overlap) */
+    height: 100%;
+  }
+
   body {
     background-color: var(--color-pale);
     @apply text-slate-900;
+    min-height: 100%;
+    /* Safe area insets — keeps content clear of phone notch & home bar */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
 }
 

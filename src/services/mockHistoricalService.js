@@ -6,7 +6,9 @@ let cachedHistoricalEvents = [];
 
 export const getHistoricalEvents = async () => {
     try {
-        const response = await fetch(`${BASE_URL}/historical-events`);
+        const response = await fetch(`${BASE_URL}/historical-events`, {
+            headers: { 'Bypass-Tunnel-Reminder': 'true' }
+        });
         if (!response.ok) throw new Error('API Error');
         const data = await response.json();
         cachedHistoricalEvents = data;
@@ -30,7 +32,10 @@ export const setHistoricalEvents = async (newEvents) => {
     try {
         const response = await fetch(`${BASE_URL}/historical-events`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Bypass-Tunnel-Reminder': 'true'
+            },
             body: JSON.stringify(eventsToSave),
         });
         if (!response.ok) throw new Error('Failed to save to database');

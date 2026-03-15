@@ -7,10 +7,20 @@ const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 export const sendOtp = async (email) => {
     const res = await fetch(`${BASE_URL}/auth/send-otp`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            'Bypass-Tunnel-Reminder': 'true'
+        },
         body: JSON.stringify({ email }),
     });
-    const data = await res.json();
+
+    let data;
+    try {
+        data = await res.json();
+    } catch (e) {
+        throw new Error(`Server returned HTML (likely a tunnel warning). Please open ${BASE_URL} in your browser and click 'Continue' first.`);
+    }
+
     if (!res.ok) throw new Error(data.detail || 'Failed to send OTP.');
     return data;
 };
@@ -21,10 +31,20 @@ export const sendOtp = async (email) => {
 export const registerUser = async (email, password, otp) => {
     const res = await fetch(`${BASE_URL}/auth/register`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            'Bypass-Tunnel-Reminder': 'true'
+        },
         body: JSON.stringify({ email, password, otp }),
     });
-    const data = await res.json();
+
+    let data;
+    try {
+        data = await res.json();
+    } catch (e) {
+        throw new Error(`Server returned HTML. Please open ${BASE_URL} in your browser and click 'Continue' first.`);
+    }
+
     if (!res.ok) throw new Error(data.detail || 'Registration failed.');
     return data;
 };
@@ -35,10 +55,20 @@ export const registerUser = async (email, password, otp) => {
 export const loginUser = async (email, password) => {
     const res = await fetch(`${BASE_URL}/auth/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            'Bypass-Tunnel-Reminder': 'true'
+        },
         body: JSON.stringify({ email, password }),
     });
-    const data = await res.json();
+
+    let data;
+    try {
+        data = await res.json();
+    } catch (e) {
+        throw new Error(`Server returned HTML. Please open ${BASE_URL} in your browser and click 'Continue' first.`);
+    }
+
     if (!res.ok) throw new Error(data.detail || 'Login failed.');
     return data;
 };

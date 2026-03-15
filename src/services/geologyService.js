@@ -10,7 +10,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  */
 export const getElevation = async (lat, lng) => {
     try {
-        const response = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lng}`);
+        const response = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lng}`, { signal: AbortSignal.timeout(5000) });
         if (!response.ok) throw new Error('Elevation API failed');
         const data = await response.json();
         return data.elevation[0] || 0;
@@ -26,7 +26,7 @@ export const getElevation = async (lat, lng) => {
  */
 export const getSoilMoisture = async (lat, lng) => {
     try {
-        const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=soil_moisture_0_to_1cm`);
+        const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=soil_moisture_0_to_1cm`, { signal: AbortSignal.timeout(5000) });
         if (!response.ok) throw new Error('Soil Moisture API failed');
         const data = await response.json();
         return data.current.soil_moisture_0_to_1cm || 0;

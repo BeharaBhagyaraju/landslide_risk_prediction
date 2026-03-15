@@ -47,6 +47,7 @@ export const analyzeSatelliteImage = async (fileOrBase64) => {
         const response = await fetch(`${BASE_URL}/analyze-image`, {
             method: 'POST',
             body: formData,
+            headers: { 'Bypass-Tunnel-Reminder': 'true' },
             signal: AbortSignal.timeout(30_000), // 30s — model inference can be slow
         });
 
@@ -74,6 +75,7 @@ export const uploadModel = async (file) => {
 
         const response = await fetch(`${BASE_URL}/upload-model`, {
             method: 'POST',
+            headers: { 'Bypass-Tunnel-Reminder': 'true' },
             body: formData,
         });
 

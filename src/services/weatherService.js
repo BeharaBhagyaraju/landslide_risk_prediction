@@ -35,7 +35,7 @@ const getWmoWeatherLabel = (code) => {
  */
 const fetchOpenMeteoData = async (lat, lng) => {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=precipitation_sum&past_days=7&timezone=auto`;
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
     if (!response.ok) throw new Error(`Open-Meteo API error: ${response.status}`);
     return await response.json();
 };

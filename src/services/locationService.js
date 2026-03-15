@@ -4,8 +4,8 @@
 
 const GEO_OPTIONS = {
     enableHighAccuracy: true,
-    timeout: 10000,
-    maximumAge: 0,
+    timeout: 5000,
+    maximumAge: 60000,
 };
 
 /**

@@ -15,7 +15,7 @@ export const getNasaHistoricalLandslides = async (lat, lng, radiusMeters = 50000
         // The column for location is 'location' (point type)
         const url = `https://data.nasa.gov/resource/itqz-8u6u.json?$where=within_circle(location, ${lat}, ${lng}, ${radiusMeters})&$limit=100`;
 
-        const response = await fetch(url);
+        const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
         if (!response.ok) throw new Error('NASA API failed');
 
         const data = await response.json();

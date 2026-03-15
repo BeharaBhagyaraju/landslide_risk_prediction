@@ -15,12 +15,21 @@ export const fetchPrediction = async (lat, lng) => {
     try {
         const response = await fetch(
             `${BASE_URL}/predict?lat=${lat}&lng=${lng}`,
-            { signal: AbortSignal.timeout(8000) }
+            {
+                signal: AbortSignal.timeout(8000),
+                headers: { 'Bypass-Tunnel-Reminder': 'true' }
+            }
         );
 
         if (!response.ok) throw new Error(`API error ${response.status}`);
 
-        const data = await response.json();
+        let data;
+        try {
+            data = await response.json();
+        } catch (e) {
+            throw new Error('Server returned HTML instead of JSON. Please check the tunnel.');
+        }
+
         return {
             ...data,
             lat,
@@ -49,11 +58,19 @@ export const saveAssessment = async (assessmentData) => {
     try {
         const response = await fetch(`${BASE_URL}/assessments`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Bypass-Tunnel-Reminder': 'true'
+            },
             body: JSON.stringify(assessmentData),
         });
         if (!response.ok) throw new Error('Failed to save assessment');
-        return await response.json();
+
+        try {
+            return await response.json();
+        } catch (e) {
+            return { status: 'error', message: 'Received HTML instead of JSON' };
+        }
     } catch (err) {
         console.error('[PredictionService] Failed to save assessment:', err.message);
         // Silent fail for persistence
@@ -66,9 +83,16 @@ export const saveAssessment = async (assessmentData) => {
  */
 export const fetchAssessmentHistory = async () => {
     try {
-        const response = await fetch(`${BASE_URL}/assessments`);
+        const response = await fetch(`${BASE_URL}/assessments`, {
+            headers: { 'Bypass-Tunnel-Reminder': 'true' }
+        });
         if (!response.ok) throw new Error('Failed to fetch history');
-        return await response.json();
+
+        try {
+            return await response.json();
+        } catch (e) {
+            throw new Error('Received HTML instead of JSON from tunnel');
+        }
     } catch (err) {
         console.warn('[PredictionService] Could not fetch history, using empty list:', err.message);
         return [];
@@ -82,9 +106,15 @@ export const deleteAssessment = async (assessmentId) => {
     try {
         const response = await fetch(`${BASE_URL}/assessments/${assessmentId}`, {
             method: 'DELETE',
+            headers: { 'Bypass-Tunnel-Reminder': 'true' }
         });
         if (!response.ok) throw new Error('Failed to delete assessment');
-        return await response.json();
+
+        try {
+            return await response.json();
+        } catch (e) {
+            return { status: 'success', note: 'Deleted, but received non-JSON response' };
+        }
     } catch (err) {
         console.error('[PredictionService] Failed to delete assessment:', err.message);
         return { status: 'error', message: err.message };
