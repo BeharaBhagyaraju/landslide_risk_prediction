@@ -5,7 +5,7 @@ torchvision
 pillow
 numpy
 python-multipart
-tensorflow
 h5py
 passlib[bcrypt]
 python-jose[cryptography]
+email-validator
