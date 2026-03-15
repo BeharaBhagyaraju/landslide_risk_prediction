@@ -130,6 +130,7 @@ if os.path.exists(MODEL_PATH):
         traceback.print_exc()
         model = None
 else:
+    model = None
     print(f"⚠️  Model file not found at {MODEL_PATH} — using mock predictions")
 
 # ── Global Keras Model State ────────────────────────────────────────────────
